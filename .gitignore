@@ -1,0 +1,14 @@
+# Secrets — never commit
+.env
+*.token
+
+# Local runtime data / generated artifacts
+data/
+*.usage.json
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store

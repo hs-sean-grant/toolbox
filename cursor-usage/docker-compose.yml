@@ -1,0 +1,16 @@
+services:
+  cursor-usage:
+    build: .
+    ports:
+      - "${PORT:-8799}:8799"
+    environment:
+      CURSOR_SESSION_TOKEN: ${CURSOR_SESSION_TOKEN:-}
+      USAGE_INTERVAL: ${USAGE_INTERVAL:-600}
+      PORT: 8799
+      DATA_DIR: /data
+    volumes:
+      - cursor-usage-data:/data
+    restart: unless-stopped
+
+volumes:
+  cursor-usage-data:

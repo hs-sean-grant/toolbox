@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cursor Usage</title>
+<meta name="theme-color" content="#0d1117" />
+<style>
+  :root {
+    --bg: #0e1116;
+    --panel: #161b22;
+    --border: #2a313c;
+    --text: #e6edf3;
+    --muted: #9aa4b2;
+    --faint: #6e7781;
+    --accent: #388bfd;
+    --ok: #2da44e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 28px 24px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; letter-spacing: -0.01em; }
+  .asof { font-size: 12px; color: var(--faint); white-space: nowrap; }
+  .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; vertical-align: middle; }
+  .live-dot.stale { background: #bf8700; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .panel-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .panel-head h2 { font-size: 15px; font-weight: 620; margin: 0; }
+  .meta { font-size: 12px; color: var(--faint); }
+  code { background: #1c222b; padding: 1px 6px; border-radius: 4px; color: var(--muted); font-size: 12px; }
+
+  .urow { margin: 12px 0; }
+  .urow .lbl { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+  .ubar { position: relative; height: 12px; border-radius: 6px; background: var(--border); overflow: hidden; }
+  .ufill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; transition: width .4s ease; }
+  .umuted { color: var(--faint); font-size: 12px; margin-top: 5px; }
+  .uwarn { color: #d1242f; font-weight: 600; }
+  .uburn { color: var(--text); font-size: 13px; margin-top: 6px; }
+  .uburn b { font-weight: 700; }
+  .urow.alert { padding: 8px 10px; border-radius: 8px; animation: flashred 1.05s ease-in-out infinite; }
+  @keyframes flashred {
+    0%, 100% { background: transparent; box-shadow: 0 0 0 0 rgba(209,36,47,0); }
+    50% { background: rgba(209,36,47,.14); box-shadow: 0 0 0 2px rgba(209,36,47,.6); }
+  }
+  .urow.alert .ufill { animation: fillpulse 1.05s ease-in-out infinite; }
+  @keyframes fillpulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+  .ubadge { display: inline-block; font-size: 11px; font-weight: 700; color: #fff; background: #d1242f;
+    border-radius: 5px; padding: 2px 7px; margin-bottom: 7px; letter-spacing: .02em;
+    animation: badgeblink 1.05s step-start infinite; }
+  @keyframes badgeblink { 50% { opacity: .45; } }
+
+  .heat { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+  .heat-title { font-weight: 700; font-size: 13px; }
+  .heat-gauge { display: flex; gap: 3px; }
+  .heat-seg { width: 26px; height: 11px; border-radius: 3px; background: var(--border); opacity: .3;
+    transition: opacity .3s ease, background .3s ease; }
+  .heat-seg.on { opacity: 1; }
+  .heat-seg.fire { animation: heatpulse .9s ease-in-out infinite; }
+  @keyframes heatpulse { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+  .heat-label { font-weight: 700; font-size: 13px; }
+  .heat-sub { color: var(--faint); font-size: 12px; }
+
+  footer { margin-top: 24px; font-size: 12px; color: var(--faint); }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Cursor Usage</h1>
+    <div class="asof"><span id="live" class="live-dot"></span><span id="asof">loading…</span></div>
+  </header>
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Billing cycle</h2>
+      <span class="meta" id="usage-meta"></span>
+    </div>
+    <div id="usage-body"><div class="umuted">Loading usage data…</div></div>
+  </div>
+  <footer>
+    Polls <code>/usage.json</code> every 45s · Data from unofficial Cursor endpoints ·
+    <a href="/usage.json" target="_blank" rel="noopener">raw JSON</a>
+  </footer>
+</div>
+<script>
+const POLL_MS = 45000;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function renderUsage(u) {
+  const meta = $("usage-meta"), body = $("usage-body");
+  if (!u) {
+    meta.textContent = "";
+    body.innerHTML = `<div class="umuted">Could not load usage data.</div>`;
+    return;
+  }
+  $("asof").textContent = u.asOf ? "as-of " + u.asOf : "—";
+  if (u.error) {
+    meta.textContent = "auth needed";
+    body.innerHTML = `<div class="umuted">Couldn't read Cursor usage — set <code>CURSOR_SESSION_TOKEN</code> or mount a token file. (${esc(String(u.error))})</div>`;
+    return;
+  }
+  const parts = [];
+  if (u.membershipType) parts.push(esc(u.membershipType));
+  if (u.daysRemaining != null) parts.push(`resets in ${u.daysRemaining}d${u.cycleEnd ? " (" + esc(u.cycleEnd) + ")" : ""}`);
+  meta.textContent = parts.join(" · ");
+
+  const p = u.period || {};
+  const inc = u.included || {};
+  const od = u.onDemand || {};
+  let html = "";
+
+  if (p.pct != null || p.usedDisplay) {
+    html += usageRow(p.label || "Period usage", p, u, p.usedDisplay || "");
+  }
+  if (p.phase === "on-demand" && inc.exhausted) {
+    html += `<div class="umuted" style="margin:-4px 0 10px">Included ${inc.used}/${inc.limit} requests exhausted — spending on on-demand this cycle.</div>`;
+  } else if (p.phase === "included-exhausted" && od.enabled) {
+    html += `<div class="umuted" style="margin:-4px 0 10px">Included cap reached. On-demand: ${esc(od.usedDisplay || "?")} of ${esc(od.limitDisplay || "?")} cap.</div>`;
+  }
+
+  const today = u.today, sess = u.session;
+  if (today) {
+    html += heatGauge(today.heat);
+    const bits = [];
+    if (today.requests != null) bits.push(`${today.requests} requests`);
+    const t = today.spendDisplay || (today.spendCents != null ? "$" + (today.spendCents / 100).toFixed(2) : null);
+    if (t) bits.push(`${esc(t)} on-demand`);
+    if (today.requests == null && today.events != null) bits.push(`${today.events} events`);
+    if (bits.length) html += `<div class="umuted" style="margin-top:6px">${bits.join(" · ")}</div>`;
+  }
+  if (sess && sess.spendDisplay) {
+    html += `<div class="umuted"><b>Session</b> ${esc(sess.spendDisplay)} since ${esc(sess.since || "poller start")}</div>`;
+  }
+  if (today || (sess && sess.spendDisplay)) {
+    const cap = today && today.source === "events-api"
+      ? "Today from usage-events API · session from poller snapshot deltas"
+      : "Today/session approximated from poller snapshot deltas (~10m cadence)";
+    html += `<div class="umuted">${esc(cap)}</div>`;
+  }
+  body.innerHTML = html || `<div class="umuted">No usage data yet.</div>`;
+}
+
+function heatGauge(h) {
+  if (!h || h.index == null) return "";
+  const zones = [
+    { c: "#388bfd", label: "Cold" },
+    { c: "#2da44e", label: "Normal" },
+    { c: "#bf8700", label: "Hot" },
+    { c: "#d1242f", label: "On fire" },
+  ];
+  const idx = Math.max(0, Math.min(3, h.index));
+  const segs = zones.map((z, i) => {
+    const on = i <= idx;
+    const fire = idx === 3 && i === 3 ? " fire" : "";
+    return `<span class="heat-seg${on ? " on" : ""}${fire}" style="${on ? "background:" + z.c : ""}"></span>`;
+  }).join("");
+  const zone = zones[idx];
+  const sub = h.baselinePerDay != null ? `typical ~${Math.round(h.baselinePerDay)}/day` : "";
+  return `<div class="heat">
+    <span class="heat-title">Today</span>
+    <div class="heat-gauge">${segs}</div>
+    <span class="heat-label" style="color:${zone.c}">${zone.label}</span>
+    ${sub ? `<span class="heat-sub">${esc(sub)}</span>` : ""}
+  </div>`;
+}
+
+function usageRow(label, m, u, extra) {
+  const pct = m.pct != null ? m.pct : 0;
+  const outpacing = !!m.outpacing;
+  const col = outpacing ? "#d1242f" : pct >= 90 ? "#d1242f" : pct >= 70 ? "#bf8700" : "#2da44e";
+  const pctStr = (+pct).toFixed(pct % 1 ? 1 : 0);
+  const right = extra ? esc(extra) + ` (${pctStr}%)` : `${pctStr}% used`;
+  const badge = outpacing
+    ? `<div class="ubadge">${m.atCap ? "AT THE WALL" : "VELOCITY OUTPACING"}</div>`
+    : "";
+  let burn = "";
+  const rateDisp = m.perDayDisplay || (m.perDay != null ? `${m.perDay}/day` : null);
+  const budgetDisp = m.budgetPerDayDisplay || (m.budgetPerDay != null ? `${m.budgetPerDay}/day` : null);
+  if (rateDisp) {
+    const rate = outpacing ? `<b class="uwarn">${esc(rateDisp)}</b>` : `<b>${esc(rateDisp)}</b>`;
+    const budget = budgetDisp ? ` · budget <b>${esc(budgetDisp)}</b>` : "";
+    const proj = m.projectedPct != null ? ` · projected <b>${m.projectedPct}%</b> of cap by reset` : "";
+    burn = `<div class="uburn">Burn ${rate}${budget}${proj}</div>`;
+  }
+  return `<div class="urow${outpacing ? " alert" : ""}">
+    ${badge}
+    <div class="lbl"><span>${esc(label)}</span><span>${right}</span></div>
+    <div class="ubar"><div class="ufill" style="width:${Math.min(pct, 100)}%;background:${col}"></div></div>
+    ${burn}
+    <div class="umuted">${wallLine(m, u)}</div>
+  </div>`;
+}
+
+function wallLine(m, u) {
+  if (m.atCap) return `<span class="uwarn">At the wall — cap reached</span>`;
+  if (m.wallDate && m.hitsWallBeforeReset) {
+    const before = (u.daysRemaining != null && m.daysToWall != null)
+      ? Math.max(0, Math.round(u.daysRemaining - m.daysToWall)) : null;
+    return `<span class="uwarn">Hits the wall ~${esc(m.wallDate)} (in ${m.daysToWall}d)</span>${before != null ? ` — ${before}d before reset` : ""}`;
+  }
+  if (m.projectedPct != null && !m.atCap) {
+    return `On pace for ~${m.projectedPct}% of cap by reset — no wall this cycle`;
+  }
+  return "";
+}
+
+function setLive(ok) {
+  const dot = $("live");
+  dot.classList.toggle("stale", !ok);
+  dot.title = ok ? "Live" : "Stale / fetch error";
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/usage.json?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    renderUsage(await r.json());
+    setLive(true);
+  } catch (e) {
+    setLive(false);
+    renderUsage(null);
+  }
+}
+
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
