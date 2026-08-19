@@ -9,14 +9,9 @@ Nothing here is tied to a specific company, codebase, or internal system.
 
 ## Tools
 
-Together, `cursor-usage` + `cursor-usage-bridge` are one **completely token-less**
-solution for personal Cursor usage: the bridge fetches from your browser session,
-the server transforms + serves a documented `usage.json`. No token is ever stored.
-
 | Tool | What it does |
 |------|--------------|
-| [`cursor-usage/`](cursor-usage/) | **Token-less** ingest server + dashboard for **personal Cursor usage**. Accepts `POST /ingest`, exposes a documented `usage.json` for your own dashboards/agents. Runs bare or in Docker. |
-| [`cursor-usage-bridge/`](cursor-usage-bridge/) | The **token-less** feeder — Chrome extension + bookmarklet that fetches usage from your logged-in cursor.com session and POSTs it to `cursor-usage`'s `/ingest` (or any compatible ingest endpoint). |
+| [`tokenless-cursor-usage/`](tokenless-cursor-usage/) | A **completely token-less** solution for personal Cursor usage. The **bridge** (Chrome extension + bookmarklet) fetches from your logged-in cursor.com session; the **server** transforms + serves a documented `usage.json` for your own dashboards/agents. No token is ever stored. |
 
 ## Conventions
 
