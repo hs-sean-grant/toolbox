@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Cursor Usage Bridge",
+  "version": "1.0.0",
+  "description": "Fetches Cursor usage from your logged-in cursor.com session and posts it to your local dashboard ingest endpoint. No token stored.",
+  "permissions": ["alarms", "storage"],
+  "host_permissions": [
+    "https://cursor.com/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html"
+}

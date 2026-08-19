@@ -1,11 +1,21 @@
-# Cursor Usage — local building block
+# Cursor Usage — local, token-less building block
 
-A **self-contained, per-user** tool that polls Cursor's unofficial usage endpoints and exposes:
+A **self-contained, per-user** ingest server + dashboard for your personal Cursor
+usage. It is **completely token-less**: no `WorkosCursorSessionToken`, no env
+secret, nothing to leak. The authenticated fetch runs in **your browser** (via the
+companion [`cursor-usage-bridge/`](../cursor-usage-bridge/) extension/bookmarklet),
+which POSTs the raw payloads to this server's `/ingest`. The server transforms them
+and exposes:
 
 - A small **web dashboard** (`http://localhost:8799`)
 - A stable **`usage.json` contract** you can `curl` into your own dashboard, agent, or alerting
 
-Each teammate runs it locally with **their own** `WorkosCursorSessionToken`. The token is an account credential — never commit or share it.
+```
+cursor.com (your session)  →  bridge fetch  →  POST /ingest  →  usage.json  →  dashboard + agents
+```
+
+The session cookie **never leaves Chrome** (httpOnly — not readable by local scripts
+or agents). Only usage **data** lands on disk. Each teammate runs it locally.
 
 > **Caveat:** Cursor does not publish these APIs. Endpoints and field shapes can change without notice. This tool is best-effort.
 
@@ -18,76 +28,67 @@ One unified billing-cycle story (not two equal bars):
    - Then **on-demand spend** (`GET /api/usage-summary` → cents / $ cap)
 2. **Burn-rate** — velocity vs sustainable budget, projected cap % by reset, red pulse when outpacing or at the wall
 3. **Today heat gauge** — cold / normal / hot / on fire vs your cycle daily average (centered on 1.0×)
-4. **Session delta** — on-demand $ since this poller instance started (snapshot deltas)
+4. **Session delta** — on-demand $ since this server's first sync (snapshot deltas)
 
-## Get your token
-
-1. Log into [cursor.com](https://cursor.com)
-2. DevTools → **Application** → **Cookies** → `cursor.com`
-3. Copy **`WorkosCursorSessionToken`**
-
-Store it via environment variable or a mounted file — **never** bake it into the image or commit it.
-
-| Source (first match wins) | Path / env |
-|---------------------------|------------|
-| Environment | `CURSOR_SESSION_TOKEN` |
-| Mounted secret file | `CURSOR_TOKEN_FILE` (default `/run/secrets/cursor_token`) |
-| Local file (bare run) | `~/.config/cursor-usage/token` |
-
-## Run with Docker (recommended)
+## Quick start (Docker)
 
 ```bash
-cd tools/cursor-usage
-cp .env.example .env
-# edit .env — paste CURSOR_SESSION_TOKEN=
-
+cd cursor-usage
 docker compose up -d
-open http://localhost:8799
+open http://localhost:8799     # shows "waiting for data" until the bridge syncs
 ```
 
-Stop: `docker compose down`
+Then feed it token-lessly — pick one:
 
-## Run bare (no Docker)
+- **Extension (auto, recommended):** load [`cursor-usage-bridge/`](../cursor-usage-bridge/) unpacked in Chrome. It syncs on install and every ~10 min from your logged-in cursor.com session.
+- **Bookmarklet (one-shot):** click it while on a cursor.com tab — see [`cursor-usage-bridge/bookmarklet.md`](../cursor-usage-bridge/bookmarklet.md).
+
+The dashboard updates within a minute of the first sync. Stop with `docker compose down`.
+
+> The bridge defaults to `http://127.0.0.1:8799/ingest`. If you change `PORT`, update the bridge's ingest URL to match (extension Options, or the bookmarklet source).
+
+## Quick start (bare, no Docker)
 
 ```bash
-cd tools/cursor-usage
-export CURSOR_SESSION_TOKEN="your-token-here"
-# optional: export DATA_DIR=./data PORT=8799 USAGE_INTERVAL=600
+cd cursor-usage
+# optional: export PORT=8799 DATA_DIR=./data HOST=127.0.0.1
 python3 app.py
 ```
 
-Open `http://localhost:8799`. Data files land in `./data/usage.json` and `./data/usage_history.json`.
+Open `http://localhost:8799`, then run the bridge/bookmarklet. Data files land in
+`./data/usage.json` and `./data/usage_history.json`.
 
 ## Consume just the data
 
-While the container/process is running:
+While the server is running:
 
 ```bash
 curl -s http://localhost:8799/usage.json | python3 -m json.tool
 ```
 
-Or read the file directly: `./data/usage.json` (bare) or from the Docker volume.
-
-Poll interval defaults to **600s** (`USAGE_INTERVAL`). The page refreshes every ~45s from the cached JSON.
+Or read the file directly: `./data/usage.json` (bare) or from the Docker volume. The
+page refreshes every ~45s from the cached JSON; freshness depends on the bridge's
+sync cadence (~10 min by default).
 
 ---
 
 ## `usage.json` output contract
 
-Written on every poll to `DATA_DIR/usage.json`. All monetary **`used` / `limit` / `*Cents` fields are integer cents** unless noted. Display strings (`*Display`) are pre-formatted for UI.
+Written on every ingest to `DATA_DIR/usage.json`. All monetary **`used` / `limit` / `*Cents` fields are integer cents** unless noted. Display strings (`*Display`) are pre-formatted for UI.
 
 ### Top-level
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `asOf` | string | Local timestamp `YYYY-MM-DD HH:MM` of this snapshot |
-| `error` | string? | Present when auth failed or no token — UI should show "auth needed" |
+| `error` | string? | Present when no data has been ingested or a payload was invalid — UI should show "waiting for data" |
 | `membershipType` | string? | e.g. `enterprise`, `pro` |
 | `cycleStart` | string? | Billing cycle start date `YYYY-MM-DD` (UTC calendar date from API) |
 | `cycleEnd` | string? | Billing cycle end / reset date |
 | `daysElapsed` | number? | Days since cycle start |
 | `daysRemaining` | number? | Days until reset |
 | `cycleDays` | number? | Total cycle length in days |
+| `autoModelMessage` | string? | Cursor's auto-model banner text, when present |
 
 ### `period` — primary bar (active constraint)
 
@@ -139,24 +140,28 @@ Written on every poll to `DATA_DIR/usage.json`. All monetary **`used` / `limit` 
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `requests` | number? | Sum of `requestsCosts` from today's events |
-| `spendCents` | number? | Sum of `chargedCents` from today's events |
+| `requests` | number? | Sum of `requestsCosts` from today's events (only when events were included in the ingest) |
+| `spendCents` | number? | Sum of `chargedCents` from today's events, or on-demand delta since local midnight |
 | `spendDisplay` | string? | Formatted on-demand spend today |
 | `events` | number? | Event count today |
-| `source` | string | `events-api` or `history-delta` |
+| `source` | string | `events-api` (bridge sent events) or `history-delta` (derived from snapshots) |
 | `note` | string? | Present when using snapshot fallback |
 | `heat` | object? | Today intensity gauge (see below) |
 
 #### `today.heat`
 
-Compares today's request volume to the cycle average daily requests (`included.used / daysElapsed`).
+Rates today's intensity against this cycle's average day. Prefers **request volume**
+(when the bridge includes today's events); otherwise falls back to **on-demand spend**
+so the gauge still renders on the spend-only path.
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `level` | string | `cold` \| `normal` \| `hot` \| `onfire` |
 | `index` | number | 0–3 zone index |
-| `ratio` | number | `today.requests / baselinePerDay` (1.0 = typical full day) |
-| `baselinePerDay` | number | Average requests/day this cycle |
+| `ratio` | number | today's value / `baselinePerDay` (1.0 = typical full day) |
+| `basis` | string | `requests` or `spend` — which meter drove the gauge |
+| `unit` | string | `requests` or `usd` (for the sub-label) |
+| `baselinePerDay` | number | Average per-day this cycle (requests, or $ when spend-based) |
 
 **Thresholds** (ratio vs baseline):
 
@@ -167,7 +172,7 @@ Compares today's request volume to the cycle average daily requests (`included.u
 | 1.35 – 2.25 | hot | 2 |
 | ≥ 2.25 | on fire | 3 |
 
-### `session` — since poller started
+### `session` — since this server's first sync
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -227,6 +232,8 @@ Compares today's request volume to the cycle average daily requests (`included.u
       "level": "normal",
       "index": 1,
       "ratio": 1.01,
+      "basis": "requests",
+      "unit": "requests",
       "baselinePerDay": 36.7
     }
   },
@@ -239,27 +246,32 @@ Compares today's request volume to the cycle average daily requests (`included.u
 }
 ```
 
-## Endpoints polled
+## What the bridge fetches (in your browser, with your session)
 
 | Method | URL | Purpose |
 |--------|-----|---------|
 | GET | `https://cursor.com/api/usage` | Included request count (500/500) |
 | GET | `https://cursor.com/api/usage-summary` | Billing cycle + on-demand $ cap |
-| POST | `https://cursor.com/api/dashboard/get-filtered-usage-events` | Today's per-event spend |
+| POST | `https://cursor.com/api/dashboard/get-filtered-usage-events` | Today's per-event spend (optional) |
+
+The bridge bundles these into `{ usage, summary, events }` and POSTs them to `/ingest`.
 
 ## HTTP server routes
 
-| Path | Content |
-|------|---------|
-| `/` | Standalone dashboard (`index.html`) |
-| `/usage.json` | Latest snapshot (`Cache-Control: no-store`) |
-| `/health` | `ok` |
+| Method | Path | Content |
+|--------|------|---------|
+| GET | `/` | Standalone dashboard (`index.html`) |
+| GET | `/usage.json` | Latest snapshot (`Cache-Control: no-store`) |
+| GET | `/health` | `ok` |
+| OPTIONS | `/ingest` | CORS preflight (allows `https://cursor.com`) |
+| POST | `/ingest` | `{ usage, summary, events }` → transform → `usage.json` |
 
 ## Security
 
-- **Token = full account access.** Treat like a password.
-- Never commit `.env`, `data/`, or token files.
-- Runs locally; binds `0.0.0.0` inside the container so Docker port mapping works — do not expose to the public internet without auth.
+- **No token anywhere.** The session cookie stays in Chrome (httpOnly); this server never sees it.
+- Bind loopback for the strictest setup (`HOST=127.0.0.1`); the Docker image binds `0.0.0.0` inside the container so port mapping works — do not expose the mapped port to the public internet.
+- `/ingest` only accepts a CORS preflight from `https://cursor.com` and writes usage data locally — it has no auth of its own, so keep the port on loopback.
+- Never commit `data/` or generated `*.json` (see `.dockerignore`).
 
 ## License / warranty
 

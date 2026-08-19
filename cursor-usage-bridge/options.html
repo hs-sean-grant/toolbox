@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Cursor Usage Bridge — Options</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; max-width: 520px; margin: 24px; }
+  label { display: block; margin-top: 16px; font-weight: 600; }
+  input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+  button { margin-top: 20px; padding: 8px 16px; }
+  .saved { color: #067647; margin-top: 12px; }
+  p { color: #57606a; }
+</style>
+</head>
+<body>
+  <h1>Cursor Usage Bridge</h1>
+  <p>Fetches usage from your logged-in <strong>cursor.com</strong> session (no token file). Posts data to your local dashboard ingest endpoint only.</p>
+  <label>Ingest URL</label>
+  <input id="ingestUrl" type="url" placeholder="http://127.0.0.1:8799/ingest" />
+  <label>Sync interval (minutes)</label>
+  <input id="intervalMinutes" type="number" min="1" max="1440" />
+  <button id="save">Save</button>
+  <div id="status" class="saved" hidden>Saved.</div>
+  <script src="options.js"></script>
+</body>
+</html>

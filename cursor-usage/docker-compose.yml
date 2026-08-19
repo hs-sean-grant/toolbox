@@ -2,10 +2,10 @@ services:
   cursor-usage:
     build: .
     ports:
+      # Must match the bridge's ingest URL (default http://127.0.0.1:8799/ingest)
       - "${PORT:-8799}:8799"
     environment:
-      CURSOR_SESSION_TOKEN: ${CURSOR_SESSION_TOKEN:-}
-      USAGE_INTERVAL: ${USAGE_INTERVAL:-600}
+      HOST: 0.0.0.0
       PORT: 8799
       DATA_DIR: /data
     volumes:

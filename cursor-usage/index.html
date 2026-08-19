@@ -86,7 +86,7 @@
     <div id="usage-body"><div class="umuted">Loading usage data…</div></div>
   </div>
   <footer>
-    Polls <code>/usage.json</code> every 45s · Data from unofficial Cursor endpoints ·
+    Polls <code>/usage.json</code> every 45s · Fed token-less by <code>cursor-usage-bridge</code> · Unofficial Cursor endpoints ·
     <a href="/usage.json" target="_blank" rel="noopener">raw JSON</a>
   </footer>
 </div>
@@ -104,8 +104,8 @@ function renderUsage(u) {
   }
   $("asof").textContent = u.asOf ? "as-of " + u.asOf : "—";
   if (u.error) {
-    meta.textContent = "auth needed";
-    body.innerHTML = `<div class="umuted">Couldn't read Cursor usage — set <code>CURSOR_SESSION_TOKEN</code> or mount a token file. (${esc(String(u.error))})</div>`;
+    meta.textContent = "waiting for data";
+    body.innerHTML = `<div class="umuted">No Cursor usage yet — run the <b>cursor-usage-bridge</b> extension (or the one-shot bookmarklet) on a logged-in <b>cursor.com</b> tab to POST fresh data here. <span style="opacity:.7">(${esc(String(u.error))})</span></div>`;
     return;
   }
   const parts = [];
@@ -138,12 +138,12 @@ function renderUsage(u) {
     if (bits.length) html += `<div class="umuted" style="margin-top:6px">${bits.join(" · ")}</div>`;
   }
   if (sess && sess.spendDisplay) {
-    html += `<div class="umuted"><b>Session</b> ${esc(sess.spendDisplay)} since ${esc(sess.since || "poller start")}</div>`;
+    html += `<div class="umuted"><b>Session</b> ${esc(sess.spendDisplay)} since ${esc(sess.since || "first sync")}</div>`;
   }
   if (today || (sess && sess.spendDisplay)) {
     const cap = today && today.source === "events-api"
-      ? "Today from usage-events API · session from poller snapshot deltas"
-      : "Today/session approximated from poller snapshot deltas (~10m cadence)";
+      ? "Today from usage-events API · session from bridge snapshot deltas"
+      : "Today/session approximated from bridge snapshot deltas (~10m sync cadence)";
     html += `<div class="umuted">${esc(cap)}</div>`;
   }
   body.innerHTML = html || `<div class="umuted">No usage data yet.</div>`;
@@ -164,7 +164,9 @@ function heatGauge(h) {
     return `<span class="heat-seg${on ? " on" : ""}${fire}" style="${on ? "background:" + z.c : ""}"></span>`;
   }).join("");
   const zone = zones[idx];
-  const sub = h.baselinePerDay != null ? `typical ~${Math.round(h.baselinePerDay)}/day` : "";
+  const sub = h.baselinePerDay != null
+    ? `typical ~${h.unit === "usd" ? "$" + Number(h.baselinePerDay).toFixed(2) : Math.round(h.baselinePerDay)}/day`
+    : "";
   return `<div class="heat">
     <span class="heat-title">Today</span>
     <div class="heat-gauge">${segs}</div>
