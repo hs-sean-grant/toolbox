@@ -1,5 +1,7 @@
 # tokenless-cursor-usage
 
+<img width="564" height="313" alt="image" src="https://github.com/user-attachments/assets/20ef9f0d-0cc0-4499-8c77-2792b421c535" />
+
 A **completely token-less** solution for tracking your personal Cursor usage —
 utilization, burn-rate, and when you'll hit the wall. No `WorkosCursorSessionToken`,
 no env secret, nothing an agent or local script could leak. The authenticated fetch
